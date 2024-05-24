@@ -56,5 +56,4 @@ class UserService {
 }
 
 const usersService = new UserService()
-const usersService2 = new UserService()
 export default usersService

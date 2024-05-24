@@ -1,5 +1,7 @@
 import express from 'express'
 import { body, validationResult, ContextRunner } from 'express-validator'
+import { httpStatus } from '~/constants/httpStatus'
+import { ErrorWithStatus } from '~/models/Error'
 
 // can be reused by many routes
 export const validate = (validations: ContextRunner[]) => {
@@ -7,8 +9,15 @@ export const validate = (validations: ContextRunner[]) => {
     // sequential processing, stops running validations chain if one fails.
     for (const validation of validations) {
       const result = await validation.run(req)
+      const errors = result.mapped()
+      for (const key in errors) {
+        const { msg } = errors[key]
+        if (msg instanceof ErrorWithStatus && msg.status !== httpStatus.UNPROCESSABLE_ENTITY) {
+          return next(msg)
+        }
+      }
       if (!result.isEmpty()) {
-        return res.status(400).json({ errors: result.mapped() })
+        return res.status(422).json({ errors: result.mapped() })
       }
     }
 
