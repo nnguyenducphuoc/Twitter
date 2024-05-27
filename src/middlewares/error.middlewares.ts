@@ -1,4 +1,3 @@
-import { error } from 'console'
 import { Request, Response, NextFunction } from 'express'
 import { omit } from 'lodash'
 import { HTTP_STATUS } from '~/constants/httpStatus'

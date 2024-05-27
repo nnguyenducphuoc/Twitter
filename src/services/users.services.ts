@@ -7,6 +7,7 @@ import { signToken } from '~/utils/jwt'
 import RefreshToken from '~/models/schemas/RefreshToken.schemas'
 import { ObjectId } from 'mongodb'
 import { config } from 'dotenv'
+import { USERS_MESSAGES } from '~/constants/messages'
 config()
 class UserService {
   private signAccessToken(user_id: string) {
@@ -76,6 +77,14 @@ class UserService {
   async checkEmailExist(email: string) {
     const user = await databaseService.users.findOne({ email })
     return Boolean(user)
+  }
+
+  async logout(refresh_token: string) {
+    const result = await databaseService.refreshTokens.deleteOne({ token: refresh_token })
+    console.log(result)
+    return {
+      message: USERS_MESSAGES.LOGOUT_SUCCESS
+    }
   }
 }
 
