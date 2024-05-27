@@ -1,155 +1,174 @@
+import { verify } from 'crypto'
 import { checkSchema } from 'express-validator'
 import { USERS_MESSAGES } from '~/constants/messages'
 import databaseService from '~/services/database.services'
 import usersService from '~/services/users.services'
+import { hashPassword } from '~/utils/crypto'
+import { verifyToken } from '~/utils/jwt'
 import { validate } from '~/utils/validation'
 
 export const loginValidator = validate(
-  checkSchema({
-    email: {
-      isEmail: {
-        errorMessage: USERS_MESSAGES.EMAIL_IS_INVALID
-      },
-      trim: true,
-      custom: {
-        options: async (value, { req }) => {
-          const user = await databaseService.users.findOne({ email: value })
-          if (user === null) {
-            throw new Error(USERS_MESSAGES.USER_NOT_FOUND)
+  checkSchema(
+    {
+      email: {
+        isEmail: {
+          errorMessage: USERS_MESSAGES.EMAIL_IS_INVALID
+        },
+        trim: true,
+        custom: {
+          options: async (value, { req }) => {
+            const user = await databaseService.users.findOne({
+              email: value,
+              password: hashPassword(req.body.password)
+            })
+            if (user === null) {
+              throw new Error(USERS_MESSAGES.EMAIL_OR_PASSWORD_IS_INCORRECT)
+            }
+            req.user = user
+            return true
           }
-          req.user = user
-          return true
+        }
+      },
+      password: {
+        isString: {
+          errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_A_STRING
+        },
+        notEmpty: {
+          errorMessage: USERS_MESSAGES.PASSWORD_IS_REQUIRED
         }
       }
     },
-    password: {
-      isStrongPassword: {
-        options: {
-          minLength: 8,
-          minUppercase: 1,
-          minLowercase: 1,
-          minNumbers: 1,
-          minSymbols: 1
-        },
-        errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_STRONG
-      },
-      isString: {
-        errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_A_STRING
-      },
-      notEmpty: {
-        errorMessage: USERS_MESSAGES.PASSWORD_IS_REQUIRED
-      },
-      isLength: {
-        options: {
-          min: 6,
-          max: 50
-        },
-        errorMessage: USERS_MESSAGES.PASSWORD_LENGTH_MUST_BE_FROM_6_TO_50
-      }
-    }
-  })
+    ['body']
+  )
 )
 
 export const registerValidator = validate(
-  checkSchema({
-    name: {
-      isString: {
-        errorMessage: USERS_MESSAGES.NAME_MUST_BE_A_STRING
-      },
-      notEmpty: {
-        errorMessage: USERS_MESSAGES.NAME_IS_REQUIRED
-      },
-      isLength: {
-        options: {
-          min: 1,
-          max: 100
+  checkSchema(
+    {
+      name: {
+        isString: {
+          errorMessage: USERS_MESSAGES.NAME_MUST_BE_A_STRING
         },
-        errorMessage: USERS_MESSAGES.NAME_LENGTH_MUST_BE_FROM_1_TO_100
+        notEmpty: {
+          errorMessage: USERS_MESSAGES.NAME_IS_REQUIRED
+        },
+        isLength: {
+          options: {
+            min: 1,
+            max: 100
+          },
+          errorMessage: USERS_MESSAGES.NAME_LENGTH_MUST_BE_FROM_1_TO_100
+        },
+        trim: true
       },
-      trim: true
-    },
-    email: {
-      isEmail: {
-        errorMessage: USERS_MESSAGES.EMAIL_IS_INVALID
-      },
-      trim: true,
-      custom: {
-        options: async (value) => {
-          const isExistEmail = await usersService.checkEmailExist(value)
-          if (isExistEmail) {
-            throw new Error(USERS_MESSAGES.EMAIL_ALREADY_EXISTS)
+      email: {
+        isEmail: {
+          errorMessage: USERS_MESSAGES.EMAIL_IS_INVALID
+        },
+        trim: true,
+        custom: {
+          options: async (value) => {
+            const isExistEmail = await usersService.checkEmailExist(value)
+            if (isExistEmail) {
+              throw new Error(USERS_MESSAGES.EMAIL_ALREADY_EXISTS)
+            }
+            return true
           }
-          return true
+        }
+      },
+      password: {
+        isStrongPassword: {
+          options: {
+            minLength: 8,
+            minUppercase: 1,
+            minLowercase: 1,
+            minNumbers: 1,
+            minSymbols: 1
+          },
+          errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_STRONG
+        },
+        isString: {
+          errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_A_STRING
+        },
+        notEmpty: {
+          errorMessage: USERS_MESSAGES.PASSWORD_IS_REQUIRED
+        },
+        isLength: {
+          options: {
+            min: 6,
+            max: 50
+          },
+          errorMessage: USERS_MESSAGES.PASSWORD_LENGTH_MUST_BE_FROM_6_TO_50
+        }
+      },
+      confirm_password: {
+        isStrongPassword: {
+          options: {
+            minLength: 8,
+            minUppercase: 1,
+            minLowercase: 1,
+            minNumbers: 1,
+            minSymbols: 1
+          },
+          errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_STRONG
+        },
+        isString: {
+          errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_A_STRING
+        },
+        notEmpty: {
+          errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_IS_REQUIRED
+        },
+        isLength: {
+          options: {
+            min: 6,
+            max: 50
+          },
+          errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_LENGTH_MUST_BE_FROM_6_TO_50
+        },
+        custom: {
+          options: (value, { req }) => {
+            if (value != req.body.password) {
+              throw new Error(USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_THE_SAME_AS_PASSWORD)
+            }
+            return true
+          }
+        }
+      },
+      date_of_birth: {
+        isISO8601: {
+          options: {
+            strict: true,
+            strictSeparator: true
+          },
+          errorMessage: USERS_MESSAGES.DATE_OF_BIRTH_MUST_BE_ISO8601
+        },
+        notEmpty: true
+      }
+    },
+    ['body']
+  )
+)
+
+export const accessTokenValidator = validate(
+  checkSchema(
+    {
+      notEmpty: {
+        errorMessage: USERS_MESSAGES.ACCESS_TOKEN_IS_REQUIRED
+      },
+      authorization: {
+        custom: {
+          options: async (value: string, { req }) => {
+            const access_token = value.replace('Bearer ', '')
+            if (access_token === '') {
+              throw new Error(USERS_MESSAGES.ACCESS_TOKEN_IS_REQUIRED)
+            }
+            const decoded_authorization = await verifyToken({ token: access_token })
+            req.decoded_authorization = decoded_authorization
+            return true
+          }
         }
       }
     },
-    password: {
-      isStrongPassword: {
-        options: {
-          minLength: 8,
-          minUppercase: 1,
-          minLowercase: 1,
-          minNumbers: 1,
-          minSymbols: 1
-        },
-        errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_STRONG
-      },
-      isString: {
-        errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_A_STRING
-      },
-      notEmpty: {
-        errorMessage: USERS_MESSAGES.PASSWORD_IS_REQUIRED
-      },
-      isLength: {
-        options: {
-          min: 6,
-          max: 50
-        },
-        errorMessage: USERS_MESSAGES.PASSWORD_LENGTH_MUST_BE_FROM_6_TO_50
-      }
-    },
-    confirm_password: {
-      isStrongPassword: {
-        options: {
-          minLength: 8,
-          minUppercase: 1,
-          minLowercase: 1,
-          minNumbers: 1,
-          minSymbols: 1
-        },
-        errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_STRONG
-      },
-      isString: {
-        errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_A_STRING
-      },
-      notEmpty: {
-        errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_IS_REQUIRED
-      },
-      isLength: {
-        options: {
-          min: 6,
-          max: 50
-        },
-        errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_LENGTH_MUST_BE_FROM_6_TO_50
-      },
-      custom: {
-        options: (value, { req }) => {
-          if (value != req.body.password) {
-            throw new Error(USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_THE_SAME_AS_PASSWORD)
-          }
-          return true
-        }
-      }
-    },
-    date_of_birth: {
-      isISO8601: {
-        options: {
-          strict: true,
-          strictSeparator: true
-        },
-        errorMessage: USERS_MESSAGES.DATE_OF_BIRTH_MUST_BE_ISO8601
-      },
-      notEmpty: true
-    }
-  })
+    ['headers']
+  )
 )
